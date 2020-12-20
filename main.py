@@ -1,41 +1,6 @@
-from multiprocessing import Process, Queue
 import os
 
 import tweepy
-
-from tweet import gather_tweets, process_tweets
-
-
-def parallel_job():
-    tweets = Queue()
-    results = Queue()
-    num_workers = 5
-
-    gather_processes = [
-        Process(target=gather_tweets, args=(tweets, )) for _ in range(num_workers)
-    ]
-
-    tweet_processes = [
-        Process(target=process_tweets, args=(
-            tweets,
-            results,
-        )) for _ in range(num_workers)
-    ]
-
-    for p in gather_processes:
-        p.start()
-
-    for p in gather_processes:
-        p.join()
-
-    for p in tweet_processes:
-        p.start()
-
-    for p in tweet_processes:
-        p.join()
-
-    while not results.empty():
-        print(results.get())
 
 
 def main():
