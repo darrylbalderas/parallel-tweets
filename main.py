@@ -1,6 +1,4 @@
-import os
-
-import tweepy
+import time
 
 from tweet import TwitterApi, TweetProcessor
 

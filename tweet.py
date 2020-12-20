@@ -4,29 +4,18 @@ import tweepy
 
 
 class TweetProcessor:
-    def __init__(self, num_workers=5) -> None:
+    def __init__(self, num_workers=4) -> None:
         self.tweets = Queue()
-        self._results = Queue()
+        self.results = Queue()
         self.num_workers = num_workers
-        self.processes = [
-            Process(
-                target=self.process_tweets,
-                args=(),
-            ) for _ in range(self.num_workers)
-        ]
-
-    @property
-    def results(self):
-        return self._results
 
     def add_tweet(self, tweet) -> None:
         self.tweets.put(tweet)
 
-    def process_tweets(self) -> None:
+    def transform(self) -> None:
         while not self.tweets.empty():
             tweet = self.tweets.get()
-
-            self._results.put(
+            self.results.put(
                 dict(text=tweet.text,
                      id=tweet.id,
                      created_id=tweet.created_at,
@@ -35,15 +24,25 @@ class TweetProcessor:
                      user_id=tweet.user.id,
                      user_screen_name=tweet.user.screen_name))
 
-    def invoke_workers(self):
-        for p in self.processes:
+    def run(self):
+        processes = [
+            Process(
+                target=self.transform,
+                args=(),
+            ) for _ in range(self.num_workers)
+        ]
+
+        for p in processes:
             p.start()
 
-        for p in self.processes:
+        for p in processes:
             p.join()
 
-    def run(self):
-        self.invoke_workers()
+    def output(self):
+        results = []
+        while not self.results.empty():
+            results.append(self.results.get())
+        return results
 
 
 class TwitterApi:
@@ -59,16 +58,19 @@ class TwitterApi:
         self.api = tweepy.API(auth)
         self.tweet_processor = tweet_processor
         self.acceptable_countries = {'US'}
+        self.acceptable_towns = {'San Francisco'}
 
-    def proess_tweets(self, acceptable_countries={'US'}, search_size=10, num_topics=3):
-        for country_trend in self.api.trends_available():
-            # TODO: Filter based on country and state/province
-            if country_trend['countryCode'] not in acceptable_countries:
-                continue
+    def apply_trend_filter(self, trend):
+        country_code = trend['countryCode']
+        town_name = trend['name']
+        is_country_code = country_code in self.acceptable_countries
+        is_town = town_name in self.acceptable_towns
+        return is_country_code and is_town
 
+    def proess_tweets(self, search_size=10, num_topics=5):
+        country_trends = filter(self.apply_trend_filter, self.api.trends_available())
+        for country_trend in country_trends:
             woeid = country_trend['woeid']
-
-            # TODO: Get California trending topics every 5 minutes
             trending_topics = sorted(self.api.trends_place(woeid)[0]['trends'],
                                      key=lambda x: x['tweet_volume']
                                      if x['tweet_volume'] else float('-inf'),
@@ -81,4 +83,4 @@ class TwitterApi:
                     self.tweet_processor.add_tweet(tweet)
 
         self.tweet_processor.run()
-        return self.tweet_processor.results
+        return self.tweet_processor.output()
