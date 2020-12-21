@@ -2,15 +2,6 @@ from multiprocessing import Process, Queue
 import tweepy
 
 
-class TweetProcessor:
-    def __init__(self, api, num_workers=4) -> None:
-        self.tweets = Queue()
-        self.results = Queue()
-        self.num_workers = num_workers
-        self.search_size_per_topic = 10
-        self.api = api
-
-
 class TwitterProcessor:
     def __init__(self, api: tweepy.API, num_workers=3) -> None:
         self.api = api
