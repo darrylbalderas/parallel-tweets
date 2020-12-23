@@ -10,7 +10,7 @@ class TwitterProcessor:
         self.tweets = Queue()
         self.results = Queue()
         self.num_workers = num_workers
-        self.search_size_per_topic = 2
+        self.search_size_per_topic = 4
 
     def apply_trend_filter(self, trend):
         country_code = trend['countryCode']
@@ -28,6 +28,8 @@ class TwitterProcessor:
                                      if x['tweet_volume'] else float('-inf'),
                                      reverse=True)
             processes = []
+
+            # TODO: Put topics into queue and pass queue into store tweets
             slices = len(trending_topics) // self.num_workers
             for i in range(self.num_workers):
                 start = i * slices
@@ -41,11 +43,7 @@ class TwitterProcessor:
                         args=(trending_topics, start, end),
                     ))
 
-            for p in processes:
-                p.start()
-
-            for p in processes:
-                p.join()
+            handle_process(processes)
 
     def store_tweets(self, topics, start, end) -> None:
         for topic in topics[start:end]:
@@ -76,13 +74,20 @@ class TwitterProcessor:
             ) for _ in range(self.num_workers)
         ]
 
-        for p in processes:
-            p.start()
-
-        for p in processes:
-            p.join()
+        handle_process(processes)
 
         results = []
         while not self.results.empty():
             results.append(self.results.get())
         return results
+
+
+def handle_process(processes):
+    for p in processes:
+        p.start()
+
+    while any([p.is_alive() for p in processes]):
+        pass
+
+    for p in processes:
+        p.join()

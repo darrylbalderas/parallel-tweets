@@ -17,7 +17,6 @@ def main():
 
     results = processor.get_results()
     # TODO: Store results in Dynamo DB
-    print(results)
 
 
 if __name__ == "__main__":
