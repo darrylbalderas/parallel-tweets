@@ -1,16 +1,16 @@
-from multiprocessing import Process, Queue
+from multiprocessing import Process, Queue, process
 import tweepy
 
 
 class TwitterProcessor:
-    def __init__(self, api: tweepy.API, num_workers=3) -> None:
+    def __init__(self, api: tweepy.API, num_workers=5) -> None:
         self.api = api
         self.acceptable_countries = {'US'}
         self.acceptable_towns = {'San Francisco'}
         self.tweets = Queue()
         self.results = Queue()
         self.num_workers = num_workers
-        self.search_size_per_topic = 4
+        self.search_size_per_topic = 2
 
     def apply_trend_filter(self, trend):
         country_code = trend['countryCode']
@@ -21,32 +21,24 @@ class TwitterProcessor:
 
     def pull_trending_tweets(self):
         country_trends = filter(self.apply_trend_filter, self.api.trends_available())
+        topics = Queue()
+
         for country_trend in country_trends:
             woeid = country_trend['woeid']
-            trending_topics = sorted(self.api.trends_place(woeid)[0]['trends'],
-                                     key=lambda x: x['tweet_volume']
-                                     if x['tweet_volume'] else float('-inf'),
-                                     reverse=True)
-            processes = []
+            for topic in self.api.trends_place(woeid)[0]['trends']:
+                topics.put(topic)
 
-            # TODO: Put topics into queue and pass queue into store tweets
-            slices = len(trending_topics) // self.num_workers
-            for i in range(self.num_workers):
-                start = i * slices
-                end = i * slices + slices
-                delta = abs(end - len(trending_topics))
-                if delta < slices:
-                    end += delta
-                processes.append(
-                    Process(
-                        target=self.store_tweets,
-                        args=(trending_topics, start, end),
-                    ))
+        processes = []
+        for _ in range(self.num_workers):
+            processes.append(Process(
+                target=self.store_tweets,
+                args=(topics, ),
+            ))
+        handle_process(processes)
 
-            handle_process(processes)
-
-    def store_tweets(self, topics, start, end) -> None:
-        for topic in topics[start:end]:
+    def store_tweets(self, topics) -> None:
+        while not topics.empty():
+            topic = topics.get()
             updated_topic = topic['name'].replace('#', '').replace(' ', '_')
             for tweet in self.api.search(q=topic['name'],
                                          result_type='recent',
